@@ -1,0 +1,32 @@
+/* src/assets/main.css */
+@import './base.css'; /* Importiert die Grundstile und Farben */
+
+#app {
+  max-width: 1280px; /* Begrenzt die maximale Breite */
+  margin: 0 auto; /* Zentriert den Inhalt horizontal */
+  padding: 1rem; /* Etwas Innenabstand (kannst du anpassen, z.B. auf 0) */
+  font-weight: normal;
+
+  /* WICHTIG: Keine display: grid oder grid-template-columns hier! */
+}
+
+/* Standard Link Styling */
+a {
+  text-decoration: none;
+  /* Farbe wird von base.css geerbt oder du setzt sie hier spezifisch */
+  /* color: hsla(160, 100%, 37%, 1); Beispiel für Grün */
+  color: var(--color-text); /* Nimmt die Textfarbe von base.css */
+  transition: 0.4s;
+}
+
+/* Hover-Effekt für Links (optional) */
+@media (hover: hover) {
+  a:hover {
+     /* leichter Hintergrund oder Farbänderung, z.B.: */
+     /* background-color: hsla(160, 100%, 37%, 0.2); */
+     opacity: 0.8; /* Einfache Alternative */
+  }
+}
+
+/* Entfernt den problematischen @media Block für große Bildschirme */
+/* Stelle sicher, dass hier keine Layout-Regeln mehr für #app oder body stehen */
