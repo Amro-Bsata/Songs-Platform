@@ -9,8 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@kalimahapps/vue-icons": "^1.7.1",
+    "axios": "^1.9.0",
+    "ethers": "^5.8.0",
     "my-project": "file:",
     "vue": "^3.5.13",
+    "vue-material-design-icons": "^5.3.1",
     "vue-router": "^4.0.13"
   },
   "devDependencies": {

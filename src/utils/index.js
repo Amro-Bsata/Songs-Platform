@@ -1,0 +1,1 @@
+export const CUSTOM_URL = "https://sepolia.etherscan.io/"
