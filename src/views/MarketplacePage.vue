@@ -1,281 +1,296 @@
 <template>
-  <div class="marketplace-page">
-    <h1>Song Marketplace</h1>
+	<div class="marketplace-page">
+		<h1>Song Marketplace</h1>
 
-    <div class="controls">
-      <input type="text" v-model="searchTerm" placeholder="Search Song Name or NFT Link...">
-      <!-- Preis-Filter (vereinfacht) -->
-      <select v-model="priceFilter">
-        <option value="">All Prices</option>
-        <option value="low">Low to High</option>
-        <option value="high">High to Low</option>
-      </select>
-      <button @click="searchSongs">Search</button>
-    </div>
+		<!-- Search & Filter Controls -->
+		<div class="controls">
+			<input type="text" v-model="searchTerm" placeholder="Search Song Name or NFT Link..." />
 
-    <div class="content-area">
-      <div class="song-list">
-        <p v-if="loading" class="loading">
-          <BxLoaderCircle class="icon" />
-        </p>
-        <p v-else-if="filteredSongs.length === 0">No songs found matching your criteria.</p>
-        <!-- Wiederverwendbare Song-Karte -->
-        <SongCard v-else v-for="song in filteredSongs" :key="song.id" :song="song" @click="selectSong(song)"
-          :class="{ selected: selectedSong && selectedSong.id === song.id }" />
-        <!-- Hier könnte Paginierung oder "Load More" hin -->
-      </div>
+			<select v-model="priceFilter">
+				<option value="">All Prices</option>
+				<option value="low">Low to High</option>
+				<option value="high">High to Low</option>
+			</select>
+		</div>
 
-      <div class="song-detail-view" v-if="selectedSong">
-        <h2>Song Details</h2>
-        <SongDetail :song="selectedSong" context="marketplace" />
-        <!-- NFT Info -->
-        <div class="nft-info">
-          <h4>NFT Information</h4>
-          <p><strong>NFT ID:</strong> {{ selectedSong.nftId || 'N/A' }}</p>
-          <p><strong>Contract:</strong> {{ selectedSong.nftContract || 'N/A' }}</p>
-          <p><strong>Type:</strong> {{ selectedSong.nftType || 'Copyright-NFT' }}</p> <!-- Annahme -->
-          <!-- Link zum NFT auf einem Explorer (z.B. Etherscan) -->
-          <a v-if="selectedSong.nftLink" :href="selectedSong.nftLink" target="_blank">View on Explorer</a>
-        </div>
-        <button class="buy-button" @click="buyNFT(selectedSong)">Buy NFT ({{ selectedSong.price || 'Price N/A'
-          }})</button>
-      </div>
-      <div class="song-detail-view placeholder" v-else>
-        <p>Select a song from the list to see details.</p>
-      </div>
-    </div>
-  </div>
+		<!-- Main Content -->
+		<div class="content-area">
+			<!-- Song List -->
+			<div class="song-list">
+				<p v-if="loading" class="loading">
+					<BxLoaderCircle class="icon" />
+				</p>
+
+				<p v-else-if="filteredSongs.length === 0">No songs found matching your criteria.</p>
+
+				<SongCard v-else v-for="song in filteredSongs" :key="song.id" :song="song" @click="selectSong(song)" :class="{ selected: selectedSong && selectedSong.id === song.id }" />
+			</div>
+
+			<!-- Song Details -->
+			<div class="song-detail-view" v-if="selectedNFT">
+				<h2>Song Details for {{ selectedNFT.song_name }}</h2>
+
+				<SongDetail :song="selectedNFT" context="marketplace" />
+
+				<div class="nft-info">
+					<h4>Song Information</h4>
+					<p><strong>Contract:</strong> {{ selectedNFT.nftContract || "N/A" }}</p>
+					<p><strong>Type:</strong> {{ selectedNFT.nftType || "Copyright-NFT" }}</p>
+
+					<a v-if="selectedNFT.nftLink" :href="selectedNFT.nftLink" target="_blank"> View on Explorer </a>
+				</div>
+				<!-- der Song-owner braucht den Buy-Knopf gar nicht -->
+				<div class="nft-buttons">
+					<button class="buy-button" v-if="address !== selectedNFT.owner" @click="buyNFT(selectedNFT)">Buy Copyright NFT ({{ selectedNFT.price || "Price N/A" }})</button>
+				</div>
+			</div>
+
+			<!-- Placeholder , wenn kein Lied ausgewählt -->
+			<div class="song-detail-view placeholder" v-else>
+				<p>Select a song from the list to see details.</p>
+			</div>
+		</div>
+	</div>
 </template>
 
 <script>
-import SongCard from '@/components/SongCard.vue'; // Wiederverwendbare Komponente
-import SongDetail from '@/components/SongDetail.vue'; // Wiederverwendbare Komponente
-import { CUSTOM_URL } from '@/utils'
+import axios from "axios";
+import { ethers } from "ethers";
+import Cookies from "js-cookie";
+import SongCard from "@/components/SongCard.vue";
+import SongDetail from "@/components/SongDetail.vue";
+import { API_URL, ADDRESS, INFURA_URL,copyrightNFTContractABI } from "@/utils";
+import { BxLoaderCircle } from "@kalimahapps/vue-icons";
 
 export default {
-  name: 'MarketplacePage',
-  components: {
-    SongCard,
-    SongDetail
-  },
-  data() {
-    return {
-      searchTerm: '',
-      priceFilter: '',
-      loading: false,
-      allSongs: [], // Hier kämen die Songs vom Backend/Blockchain
-      selectedSong: null,
-    };
-  },
-  computed: {
-    // Einfache Filterung - in Realität eher Backend-seitig
-    filteredSongs() {
-      let songs = this.allSongs;
-      if (this.searchTerm) {
-        const lowerSearch = this.searchTerm.toLowerCase();
-        songs = songs.filter(song =>
-          song.name.toLowerCase().includes(lowerSearch) ||
-          (song.nftLink && song.nftLink.toLowerCase().includes(lowerSearch))
-        );
-      }
-      // Einfache Preis-Sortierung (wenn Preis vorhanden ist)
-      if (this.priceFilter === 'low') {
-        songs.sort((a, b) => (a.price || Infinity) - (b.price || Infinity));
-      } else if (this.priceFilter === 'high') {
-        songs.sort((a, b) => (b.price || -Infinity) - (a.price || -Infinity));
-      }
-      return songs;
-    }
-  },
-  methods: {
-    fetchSongs() {
-      this.loading = true;
-      console.log('Fetching marketplace songs...');
-      // --- HIER DATEN VOM BACKEND LADEN ---
-      // Beispiel-Daten simulieren:
-      setTimeout(() => {
-        this.allSongs = [
-          { id: 1, name: 'Synthwave Dream', genre: 'Synthwave', price: '0.1 ETH', cover: 'https://placehold.co/100', nftId: '101', nftContract: '0xabc...', nftLink: `${CUSTOM_URL}/101`, nftType: 'Copyright-NFT' },
-          { id: 2, name: 'Rock Anthem', genre: 'Rock', price: '0.05 ETH', cover: 'https://placehold.co/100', nftId: '102', nftContract: '0xabc...', nftLink: `${CUSTOM_URL}/102`, nftType: 'Copyright-NFT' },
-          { id: 3, name: 'Pop Hit', genre: 'Pop', price: '0.2 ETH', cover: 'https://placehold.co/100', nftId: '103', nftContract: '0xabc...', nftLink: `${CUSTOM_URL}/103`, nftType: 'Copyright-NFT' },
-          { id: 4, name: 'Lo-Fi Chill', genre: 'Lo-Fi', price: '0.02 ETH', cover: 'https://placehold.co/100', nftId: '104', nftContract: '0xabc...', nftLink: `${CUSTOM_URL}/104`, nftType: 'Copyright-NFT' },
-        ];
-        this.loading = false;
-      }, 1500);
-    },
-    searchSongs() {
-      console.log('Searching with:', this.searchTerm, 'and filter:', this.priceFilter);
-      // In einer echten App würde dies einen neuen API-Call auslösen
-      // Hier nutzen wir den computed `filteredSongs`
-      this.selectedSong = null; // Auswahl zurücksetzen bei neuer Suche
-    },
-    selectSong(song) {
-      this.selectedSong = song;
-    },
-    buyNFT(song) {
-      console.log('Attempting to buy NFT for song:', song.id, 'for', song.price);
-      // --- HIER BLOCKCHAIN-TRANSAKTION AUSLÖSEN ---
-      alert(`Buying NFT for ${song.name} (Placeholder)`);
-    }
-  },
-  created() {
-    this.fetchSongs(); // Lade Songs beim Erstellen der Komponente
-  },
+	name: "MarketplacePage",
+	components: {
+		SongCard,
+		SongDetail,
+		BxLoaderCircle,
+	},
+	data() {
+  return {
+    loading: false,
+    error: null,
+    contractAddress: ADDRESS, 
+    contractABI: copyrightNFTContractABI,
+    address: Cookies.get("address"),
+    searchTerm: "",
+    priceFilter: "",
+    allSongs: [],
+    selectedSong: null,
+    selectedNFT: null,
+    isLoadingSongDetails: false,
+    isFanNFT: false,
+  };
+},
+
+	computed: {
+		filteredSongs() {
+			let songs = [...this.allSongs];
+
+			if (this.searchTerm) {
+				const lowerSearch = this.searchTerm.toLowerCase();
+				songs = songs.filter((song) => song.song_name.toLowerCase().includes(lowerSearch) || (song.nftLink && song.nftLink.toLowerCase().includes(lowerSearch)));
+			}
+
+			if (this.priceFilter === "low") {
+				songs.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+			} else if (this.priceFilter === "high") {
+				songs.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+			}
+
+			return songs;
+		},
+	},
+
+	methods: {
+		async fetchSongs() {
+			this.loading = true;
+			try {
+				const response = await axios.get(`${API_URL}market/songs`);
+
+			
+				const songsWithImages = await Promise.all(
+					response.data.map(async (song) => {
+						let image = null;
+
+						try {
+							if (song.uri) {
+								const meta = await axios.get(song.uri);
+								image = meta?.data?.response?.data?.data?.[0]?.image_url || null;
+							}
+						} catch (err) {
+							console.warn(`Failed to fetch image for song ${song.song_name}`, err);
+						}
+
+						return {
+							id: song.song_id,
+							song_name: song.song_name,
+							styles: song.styles || "Unknown",
+							price: (song.copyright_nft_price / 1000000000).toFixed(8),
+							nftId: song.song_id,
+							nftContract: song.copyright_nft_contract,
+							nftLink: song.uri,
+							nftType: "Copyright-NFT",
+							owner: song.owner,
+							owner_nft_contract: song.owner_nft_contract,
+							url: song.uri,
+							image_url: image,
+						};
+					}),
+				);
+
+				this.allSongs = songsWithImages;
+			} catch (error) {
+				console.error("Error fetching songs:", error);
+			} finally {
+				this.loading = false;
+			}
+		},
+
+		async fetchSongDetails(song) {
+			if (!song.url) return;
+
+			try {
+				this.isLoadingSongDetails = true;
+				const response = await axios.get(song.url);
+				const fanNFTResponse = await axios.get(`${API_URL}fannft/remaining/${song.id}`);
+				this.isFanNFT = fanNFTResponse.data;
+				const apiResponse = response?.data?.response?.data?.data?.[0];
+				const songData = {
+					...song,
+					...(apiResponse || {}),
+				};
+				this.selectedNFT = songData;
+			} catch (error) {
+				console.error("Error fetching song details:", error);
+			} finally {
+				this.isLoadingSongDetails = false;
+			}
+		},
+
+		async selectSong(song) {
+			this.selectedSong = song;
+			await this.fetchSongDetails(song);
+		},
+
+		async buyNFT(song) {
+			// Infura configuration
+			const infuraUrl = INFURA_URL;
+			const provider = new ethers.providers.JsonRpcProvider(infuraUrl);
+
+			try {
+				const contract = new ethers.Contract(song.nftContract, this.contractABI, provider);
+
+				const code = await provider.getCode(song.nftContract);
+				if (code === "0x") {
+					throw new Error("No contract deployed at the given address.");
+				}
+
+				let price;
+				try {
+					price = await contract.price();
+				} catch (error) {
+					price = ethers.utils.parseEther("0.01"); // Default price
+				}
+
+				if (!window.ethereum) {
+					alert("MetaMask is required to sign transactions.");
+					return;
+				}
+
+				const walletProvider = new ethers.providers.Web3Provider(window.ethereum);
+				await walletProvider.send("eth_requestAccounts", []);
+				const signer = walletProvider.getSigner();
+
+				const signedContract = new ethers.Contract(song.nftContract, this.contractABI, signer);
+
+				const tx = await signedContract.mintToken(signer.getAddress(), { value: price });
+				await tx.wait();
+				alert(`Successfully purchased ${song.song_name}`);
+			} catch (error) {
+				console.error("Error buying NFT:", error);
+				alert("Failed to purchase NFT. Please check the console for details.");
+			}
+		},
+	},
+
+	created() {
+		this.fetchSongs();
+	},
 };
-</script>
-<script setup>
-import { BxLoaderCircle } from '@kalimahapps/vue-icons';
 </script>
 
 <style scoped>
 .marketplace-page {
-  padding-bottom: 50px;
-  /* Platz unten */
+	padding-bottom: 50px;
+	
 }
 
 .controls {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 25px;
-  padding: 15px;
-  background-color: #555;
-  border-radius: 8px;
+	display: flex;
+	gap: 15px;
+	margin-bottom: 25px;
+	padding: 15px;
+	background-color: #555;
+	border-radius: 8px;
 }
 
 .controls input[type="text"] {
-  flex-grow: 1;
-  /* Nimmt verfügbaren Platz */
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+	flex-grow: 1;
+	padding: 8px 12px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
 }
 
 .controls select,
 .controls button {
-  padding: 8px 15px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background-color: white;
-  cursor: pointer;
+	padding: 8px 15px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background-color: white;
+	cursor: pointer;
 }
 
 .controls button {
-  background-color: #42b983;
-  color: white;
-  border-color: #42b983;
+	background-color: #42b983;
+	color: white;
+	border-color: #42b983;
 }
 
 .controls button:hover {
-  background-color: #36a86e;
+	background-color: #36a86e;
 }
-
 
 .content-area {
-  display: flex;
-  gap: 30px;
-  /* Abstand zwischen Liste und Detailansicht */
+	display: flex;
+	gap: 30px;
 }
-
-.song-list {
-  flex: 1;
-  /* Nimmt verfügbaren Platz, passt sich an */
-  max-height: 60vh;
-  /* Beispielhöhe, damit es scrollbar wird */
-  overflow-y: auto;
-  /* Scrollen ermöglichen */
-  border: 1px solid #444;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.loading {
-  width: 100%;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 0 10px 0;
-}
-
-.icon {
-  animation: spinner 1.5s linear infinite;
-  color: #36a86e;
-  font-size: 50px;
-}
-
-@keyframes spinner {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.song-list .song-card {
-  /* Styling für Karten in der Liste */
-  margin-bottom: 10px;
-  border: 1px solid transparent;
-  /* Rahmen für Auswahl */
-}
-
-.song-list .song-card.selected {
-  border-color: #42b983;
-  background-color: #e9f7f0;
-}
-
-
-.song-detail-view {
-  flex: 2;
-  /* Detailansicht ist breiter */
-  border: 1px solid #444;
-  padding: 20px;
-  border-radius: 8px;
-  background-color: #555;
-}
-
-.song-detail-view.placeholder {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #aaa;
-  font-style: italic;
-}
-
 
 .nft-info {
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px solid #eee;
+	margin-top: 20px;
+	padding-top: 15px;
+	border-top: 1px solid #eee;
 }
 
 .nft-info h4 {
-  margin-bottom: 10px;
+	margin-bottom: 10px;
 }
 
 .nft-info p {
-  margin: 5px 0;
-  font-size: 0.9em;
+	margin: 5px 0;
+	font-size: 0.9em;
 }
 
 .nft-info a {
-  color: #42b983;
-  text-decoration: underline;
+	color: #42b983;
+	text-decoration: underline;
 }
 
-.buy-button {
-  margin-top: 20px;
-  padding: 10px 20px;
-  background-color: #42b983;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-.buy-button:hover {
-  background-color: #36a86e;
+.nft-buttons {
+	display: flex;
+	gap: 15px;
 }
 </style>

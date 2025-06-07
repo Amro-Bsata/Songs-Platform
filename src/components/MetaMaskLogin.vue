@@ -1,69 +1,97 @@
 <template>
-  <button @click="login">Login with MetaMask</button>
-  <button @click="fetchProtectedData">Fetch Protected Data</button>
-
+	<button v-if="!isAuthenticated" @click="login" class="cta-button" :disabled="loading">
+		<span v-if="loading" class="loading-nfts">
+			<LoadingIcon class="icon" :size="8" />
+		</span>
+		<span v-else>Login with MetaMask</span>
+	</button>
 </template>
 
 <script>
-import { ethers } from 'ethers';
-import axios from 'axios';
+import { ethers } from "ethers";
+import axios from "axios";
+import Cookies from "js-cookie";
+import { API_URL } from "@/utils";
+import LoadingIcon from "vue-material-design-icons/Loading.vue";
 
 export default {
-  name: 'MetaMaskLogin',
-  methods: {
-    async login() {
-      if (!window.ethereum) {
-        alert('Please install MetaMask!');
-        return;
-      }
+	name: "MetaMaskLogin",
+	components: {
+		LoadingIcon,
+	},
+	data() {
+		return {
+			loading: false,
+			isAuthenticated: false,
+		};
+	},
+	mounted() {
+		const token = Cookies.get("access_token");
+		if (token) {
+			this.isAuthenticated = true;
+		}
+	},
+	methods: {
+		async login() {
+			if (!window.ethereum) {
+				alert("Please install MetaMask!");
+				return;
+			}
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send('eth_requestAccounts', []);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
+			this.loading = true;
 
-      // 1. Fetch nonce from backend
-      const { data } = await axios.get('http://localhost:5000/api/nonce', {
-        params: { address }
-      });
-      const nonce = data.nonce;
+			try {
+				const provider = new ethers.providers.Web3Provider(window.ethereum);
+				await provider.send("eth_requestAccounts", []);
+				const signer = provider.getSigner();
+				const address = await signer.getAddress();
 
-      // 2. Sign the nonce
-      const signature = await signer.signMessage(nonce);
+				// 1. Fetch nonce from backend
+				const { data } = await axios.get(`${API_URL}/api/nonce`, {
+					params: { address },
+				});
 
-      // 3. Send signature to server for verification
-      const resp = await axios.post('http://localhost:5000/api/login', {
-        address,
-        signature
-      });
+				// 2. Sign the nonce
+				const signature = await signer.signMessage(data.nonce);
 
-      if (resp.data.success) {
-        console.log('Authenticated:', resp.data.address);
-        const token = resp.data.access_token;
-        localStorage.setItem('access_token', token);
-        // Store session token or proceed
-      } else {
-        console.error('Auth failed', resp.data.error);
-      }
-    },
-    async fetchProtectedData() {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        console.error('No access token found!');
-        return;
-      }
+				// 3. Send signature to server for verification
+				const resp = await axios.post(`${API_URL}/api/login`, {
+					address,
+					signature,
+				});
 
-      try {
-        const response = await axios.get('http://localhost:5000/api/protected', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        console.log('Protected data:', response.data);
-      } catch (error) {
-        console.error('Access denied or error:', error.response?.data || error.message);
-      }
-    }
-  }
+				if (resp.data.success) {
+					const token = resp.data.access_token;
+					Cookies.set("access_token", token, { expires: 1 }); // expires in 1 day
+					Cookies.set("address", address, { expires: 1 });
+					this.isAuthenticated = true;
+				} else {
+					console.error("Authentication failed:", resp.data.error);
+				}
+			} catch (error) {
+				console.error("Login error:", error.message || error);
+			} finally {
+				this.loading = false;
+			}
+		},
+
+		async fetchProtectedData() {
+			const token = Cookies.get("access_token");
+			if (!token) {
+				console.error("No access token found!");
+				return;
+			}
+
+			try {
+				const response = await axios.get(`${API_URL}/protected`, {
+					headers: {
+						Authorization: `Bearer ${token}`,
+					},
+				});
+			} catch (error) {
+				console.error("Access denied or error:", error.response?.data || error.message);
+			}
+		},
+	},
 };
 </script>

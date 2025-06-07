@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <nav class="main-nav">
-      <div class="logo">MusikApp</div>
+      <div class="logo">Musikana</div>
       <div class="MetaMaskLogin">
         <MetaMaskLogin />
       </div>
@@ -9,18 +9,16 @@
         <router-link to="/">Home</router-link>
         <router-link to="/songs">Songs</router-link>
         <router-link to="/marketplace">Marketplace</router-link>
-        <!-- Annahme für "shot" -->
         <router-link to="/top-secrets">Top Secrets</router-link>
       </div>
       <div class="user-actions">
         <router-link to="/my-songs">My Songs</router-link>
-        <!-- Hier käme Login/Profil Icon hin -->
         <span class="profile-icon">👤</span>
       </div>
     </nav>
     <main>
       <router-view />
-      <!-- Hier werden die Seiten geladen -->
+      <!-- VUEE APP -->
     </main>
   </div>
 </template>
@@ -92,11 +90,16 @@ export default {
 .profile-icon {
   font-size: 1.5em;
   cursor: pointer;
-  /* Zeigt an, dass es klickbar sein könnte */
+  
 }
 
 main {
   padding: 0 20px;
-  /* Etwas Platz an den Seiten */
+  
+}
+
+.MetaMaskLogin {
+  display: flex;
+  gap: 10px;
 }
 </style>
